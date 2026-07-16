@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -22,15 +23,30 @@ export default function LoginPage() {
     event.preventDefault();
     setLoading(true);
     setMessage("");
-
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-
     if (error) {
       setMessage("Accesso non riuscito. Controlla email e password.");
       return;
     }
     router.replace("/dashboard");
+  }
+
+  async function resetPassword() {
+    if (!email) {
+      setMessage("Inserisci prima il tuo indirizzo email.");
+      return;
+    }
+    setRecoveryLoading(true);
+    setMessage("");
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    setRecoveryLoading(false);
+    if (error) {
+      setMessage(`Errore nell'invio: ${error.message}`);
+      return;
+    }
+    setMessage("Email di recupero inviata. Apri il nuovo link ricevuto.");
   }
 
   return (
@@ -43,7 +59,6 @@ export default function LoginPage() {
             <p className="text-sm text-slate-500">Pagamenti e ricevute sotto controllo.</p>
           </div>
         </div>
-
         <form onSubmit={login} className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm font-medium">Email</span>
@@ -53,11 +68,14 @@ export default function LoginPage() {
             <span className="mb-1 block text-sm font-medium">Password</span>
             <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </label>
-
           <button className="button-primary w-full" disabled={loading}>
             <LockKeyhole size={18} /> {loading ? "Accesso…" : "Accedi"}
           </button>
-          {message && <p className="text-sm text-red-600">{message}</p>}
+          <button type="button" onClick={resetPassword} disabled={recoveryLoading}
+            className="w-full text-sm font-medium text-slate-600 underline underline-offset-4 disabled:opacity-50">
+            {recoveryLoading ? "Invio in corso…" : "Password dimenticata?"}
+          </button>
+          {message && <p className="text-sm text-slate-600">{message}</p>}
         </form>
       </div>
     </main>
