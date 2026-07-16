@@ -1,3 +1,5 @@
+export type DeadlineStatus = "open" | "paid" | "cancelled" | "not_applicable";
+
 export type Deadline = {
   id: string;
   user_id: string;
@@ -9,6 +11,7 @@ export type Deadline = {
   notes: string | null;
   reminder_days: number[];
   is_active: boolean;
+  status: DeadlineStatus;
   created_at: string;
 };
 
