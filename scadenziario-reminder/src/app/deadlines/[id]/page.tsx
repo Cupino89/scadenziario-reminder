@@ -10,6 +10,18 @@ import { supabase } from "@/lib/supabase";
 import type { Deadline, Payment } from "@/lib/types";
 import { formatCurrency, formatDateIT } from "@/lib/date";
 
+function getNextDueDate(currentDate: string, recurrence: string): string | null {
+  const date = new Date(`${currentDate}T00:00:00`);
+
+  if (recurrence === "monthly") date.setMonth(date.getMonth() + 1);
+  else if (recurrence === "quarterly") date.setMonth(date.getMonth() + 3);
+  else if (recurrence === "semiannual") date.setMonth(date.getMonth() + 6);
+  else if (recurrence === "yearly") date.setFullYear(date.getFullYear() + 1);
+  else return null;
+
+  return date.toISOString().slice(0, 10);
+}
+
 export default function DeadlineDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -42,6 +54,12 @@ export default function DeadlineDetailPage() {
     event.preventDefault();
     setSaving(true);
     setMessage("");
+
+    if (!deadline) {
+      setMessage("Scadenza non disponibile.");
+      setSaving(false);
+      return;
+    }
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) {
@@ -81,6 +99,25 @@ export default function DeadlineDetailPage() {
       return;
     }
 
+    const nextDueDate = getNextDueDate(deadline.due_date, deadline.recurrence);
+
+    const deadlineUpdate = nextDueDate
+      ? await supabase
+          .from("deadlines")
+          .update({ due_date: nextDueDate, is_active: true })
+          .eq("id", params.id)
+      : await supabase
+          .from("deadlines")
+          .update({ is_active: false })
+          .eq("id", params.id);
+
+    if (deadlineUpdate.error) {
+      setMessage(`Pagamento salvato, ma stato scadenza non aggiornato: ${deadlineUpdate.error.message}`);
+      setSaving(false);
+      await load();
+      return;
+    }
+
     setPaymentForm({
       paid_at: new Date().toISOString().slice(0, 10),
       amount_paid: "",
@@ -88,7 +125,11 @@ export default function DeadlineDetailPage() {
     });
     setFile(null);
     setSaving(false);
-    setMessage("Pagamento registrato.");
+    setMessage(
+      nextDueDate
+        ? `Pagamento registrato. Prossima scadenza: ${formatDateIT(nextDueDate)}.`
+        : "Pagamento registrato. Scadenza contrassegnata come pagata."
+    );
     await load();
   }
 
@@ -137,7 +178,7 @@ export default function DeadlineDetailPage() {
                   <Info label="Importo previsto" value={formatCurrency(deadline.amount_expected)} />
                   <Info label="Ricorrenza" value={deadline.recurrence} />
                   <Info label="Promemoria" value={`${deadline.reminder_days.join(", ")} giorni`} />
-                  <Info label="Stato" value={deadline.is_active ? "Attiva" : "Disattiva"} />
+                  <Info label="Stato" value={deadline.is_active ? "Attiva" : "Pagata / inattiva"} />
                 </dl>
                 {deadline.notes && <p className="mt-5 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm">{deadline.notes}</p>}
               </div>
