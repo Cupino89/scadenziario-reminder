@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Ban,
-  FileText,
   Pencil,
   RotateCcw,
   Save,
@@ -17,6 +16,8 @@ import {
 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import AppShell from "@/components/AppShell";
+import AttachmentPanel from "@/components/AttachmentPanel";
+import { ACCEPT_DOCUMENTS, addDocument, documentError, validateDocument } from "@/lib/attachments";
 import { supabase } from "@/lib/supabase";
 import type { Deadline, DeadlineOccurrence, DeadlineStatus, Payment } from "@/lib/types";
 import { daysUntil, formatCurrency, formatDateIT } from "@/lib/date";
@@ -46,17 +47,18 @@ export default function DeadlineDetailPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [occurrences, setOccurrences] = useState<DeadlineOccurrence[]>([]);
   const [loading, setLoading] = useState(true);
+  const [documentsVersion, setDocumentsVersion] = useState(0);
 
   const [paymentForm, setPaymentForm] = useState({
     paid_at: new Date().toISOString().slice(0, 10),
     amount_paid: "",
     note: "",
   });
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileKey, setFileKey] = useState(0);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
-  const [editFile, setEditFile] = useState<File | null>(null);
 
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -78,10 +80,12 @@ export default function DeadlineDetailPage() {
         .order("due_date", { ascending: false }),
     ]);
 
+    if (d.error || p.error || o.error) setMessage(`Errore caricamento: ${d.error?.message || p.error?.message || o.error?.message}`);
     if (!d.error) setDeadline(d.data as Deadline);
     if (!p.error) setPayments((p.data ?? []) as Payment[]);
     if (!o.error) setOccurrences((o.data ?? []) as DeadlineOccurrence[]);
 
+    setDocumentsVersion(v => v + 1);
     setLoading(false);
   }
 
@@ -111,79 +115,50 @@ export default function DeadlineDetailPage() {
     if (!error) await load();
   }
 
-  async function uploadReceipt(selectedFile: File) {
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) throw new Error("Sessione scaduta.");
-
-    const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${auth.user.id}/${params.id}/${Date.now()}-${safeName}`;
-
-    const { error } = await supabase.storage
-      .from("receipts")
-      .upload(path, selectedFile, { cacheControl: "3600", upsert: false });
-
-    if (error) throw error;
-    return path;
-  }
-
   async function registerPayment(event: React.FormEvent) {
     event.preventDefault();
-    setSaving(true);
-    setMessage("");
-
+    if (saving) return;
     if (!deadline || deadline.status !== "open") {
       setMessage("Riapri la scadenza prima di registrare un nuovo pagamento.");
-      setSaving(false);
       return;
     }
-
-    let receiptPath: string | null = null;
-
+    setSaving(true); setMessage("");
+    let registered = false;
     try {
-      if (file) receiptPath = await uploadReceipt(file);
-
+      files.forEach(validateDocument);
       const { data, error } = await supabase.rpc("register_payment_atomic", {
         p_deadline_id: params.id,
         p_paid_at: paymentForm.paid_at,
-        p_amount_paid: paymentForm.amount_paid
-          ? Number(paymentForm.amount_paid.replace(",", "."))
-          : null,
+        p_amount_paid: paymentForm.amount_paid ? Number(paymentForm.amount_paid.replace(",", ".")) : null,
         p_note: paymentForm.note.trim() || null,
-        p_receipt_path: receiptPath,
+        p_receipt_path: null,
       });
-
       if (error) throw error;
-
+      registered = true;
       const result = Array.isArray(data) ? data[0] : data;
-      setPaymentForm({
-        paid_at: new Date().toISOString().slice(0, 10),
-        amount_paid: "",
-        note: "",
-      });
-      setFile(null);
-
-      setMessage(
-        result?.next_due_date
-          ? `Pagamento registrato. Prossima scadenza: ${formatDateIT(result.next_due_date)}.`
-          : "Pagamento registrato. Scadenza contrassegnata come pagata."
-      );
-
-      await load();
-    } catch (error) {
-      if (receiptPath) {
-        await supabase.storage.from("receipts").remove([receiptPath]);
+      const selected = [...files];
+      setFiles([]); setFileKey(key => key + 1);
+      setPaymentForm({ paid_at: new Date().toISOString().slice(0, 10), amount_paid: "", note: "" });
+      const failed: string[] = [];
+      for (const file of selected) {
+        try {
+          await addDocument(file, params.id, result.occurrence_id, result.payment_id, "receipt");
+        } catch (error) { failed.push(`${file.name}: ${documentError(error)}`); }
       }
-      setMessage(
-        `Errore registrazione: ${error instanceof Error ? error.message : "operazione non riuscita"}`
-      );
+      setMessage(failed.length
+        ? `Pagamento registrato. Alcuni allegati non sono stati salvati: ${failed.join("; ")}. Aggiungili dal pagamento nello storico, senza registrare un altro pagamento.`
+        : result?.next_due_date
+          ? `Pagamento registrato. Prossima scadenza: ${formatDateIT(result.next_due_date)}.`
+          : "Pagamento registrato. Scadenza contrassegnata come pagata.");
+    } catch (error) {
+      setMessage(registered ? `Pagamento registrato. Verifica gli allegati nello storico: ${documentError(error)}` : `Errore registrazione: ${documentError(error)}`);
     } finally {
-      setSaving(false);
+      await load(); setSaving(false);
     }
   }
 
   function startEditing(payment: Payment) {
     setEditingId(payment.id);
-    setEditFile(null);
     setEditForm({
       paid_at: payment.paid_at,
       amount_paid: payment.amount_paid == null ? "" : String(payment.amount_paid),
@@ -195,7 +170,6 @@ export default function DeadlineDetailPage() {
   function stopEditing() {
     setEditingId(null);
     setEditForm(null);
-    setEditFile(null);
   }
 
   async function savePayment(payment: Payment) {
@@ -204,40 +178,19 @@ export default function DeadlineDetailPage() {
     setSaving(true);
     setMessage("");
 
-    let newReceiptPath: string | null = payment.receipt_path;
-
     try {
-      if (editFile) newReceiptPath = await uploadReceipt(editFile);
-
       const { error } = await supabase.rpc("update_payment_atomic", {
         p_payment_id: payment.id,
         p_paid_at: editForm.paid_at,
-        p_amount_paid: editForm.amount_paid
-          ? Number(editForm.amount_paid.replace(",", "."))
-          : null,
+        p_amount_paid: editForm.amount_paid ? Number(editForm.amount_paid.replace(",", ".")) : null,
         p_note: editForm.note.trim() || null,
-        p_receipt_path: newReceiptPath,
+        p_receipt_path: null,
       });
-
       if (error) throw error;
-
-      if (editFile && payment.receipt_path && payment.receipt_path !== newReceiptPath) {
-        await supabase.storage.from("receipts").remove([payment.receipt_path]);
-      }
-
-      stopEditing();
-      setMessage("Pagamento aggiornato.");
+      stopEditing(); setMessage("Pagamento aggiornato. I documenti restano invariati.");
       await load();
-    } catch (error) {
-      if (editFile && newReceiptPath && newReceiptPath !== payment.receipt_path) {
-        await supabase.storage.from("receipts").remove([newReceiptPath]);
-      }
-      setMessage(
-        `Errore modifica pagamento: ${error instanceof Error ? error.message : "operazione non riuscita"}`
-      );
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { setMessage(`Errore modifica pagamento: ${documentError(error)}`); }
+    finally { setSaving(false); }
   }
 
   async function deletePayment(payment: Payment) {
@@ -259,24 +212,7 @@ export default function DeadlineDetailPage() {
 
       if (error) throw error;
 
-      const result = Array.isArray(data) ? data[0] : data;
-      const receiptToDelete = result?.deleted_receipt_path as string | null | undefined;
-
-      if (receiptToDelete) {
-        const { error: storageError } = await supabase.storage
-          .from("receipts")
-          .remove([receiptToDelete]);
-
-        if (storageError) {
-          setMessage(
-            "Pagamento annullato e scadenza ripristinata. La vecchia ricevuta non è stata eliminata dallo storage."
-          );
-          await load();
-          return;
-        }
-      }
-
-      setMessage("Pagamento annullato. La scadenza è stata ripristinata.");
+      setMessage("Pagamento annullato. La scadenza è stata ripristinata e i documenti sono conservati nell’occorrenza.");
       await load();
     } catch (error) {
       setMessage(
@@ -375,19 +311,6 @@ export default function DeadlineDetailPage() {
     setMessage("Occorrenza corretta come pagata.");
     setSaving(false);
     await load();
-  }
-
-  async function openReceipt(path: string) {
-    const { data, error } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(path, 300);
-
-    if (error) {
-      setMessage(`Impossibile aprire la ricevuta: ${error.message}`);
-      return;
-    }
-
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   async function removeDeadline() {
@@ -524,13 +447,16 @@ export default function DeadlineDetailPage() {
                     <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm">
                       <Upload size={18} />
                       <span>
-                        {file ? file.name : "Carica ricevuta PDF, JPG o PNG"}
+                        {files.length ? `${files.length} file: ${files.map(f => f.name).join(", ")}` : "Carica ricevute PDF, JPG o PNG (max 10 MB ciascuna)"}
                       </span>
                       <input
                         className="hidden"
                         type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                        key={fileKey}
+                        multiple
+                        disabled={saving}
+                        accept={ACCEPT_DOCUMENTS}
+                        onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                       />
                     </label>
 
@@ -581,7 +507,7 @@ export default function DeadlineDetailPage() {
                   return (
                     <div
                       key={occurrence.id}
-                      className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="py-3"
                     >
                       <span className="font-medium">{formatDateIT(occurrence.due_date)}</span>
 
@@ -613,6 +539,7 @@ export default function DeadlineDetailPage() {
                           </>
                         )}
                       </div>
+                      <AttachmentPanel key={documentsVersion} deadlineId={params.id} occurrenceId={occurrence.id} title="Documenti dell’occorrenza" disabled={saving} />
                     </div>
                   );
                 })}
@@ -631,7 +558,7 @@ export default function DeadlineDetailPage() {
                   const editing = editingId === payment.id && editForm;
 
                   return (
-                    <div key={payment.id} className="py-4">
+                    <div key={payment.id} id={`payment-${payment.id}`} className="py-4">
                       {editing ? (
                         <div className="space-y-3">
                           <div className="grid gap-3 md:grid-cols-2">
@@ -666,25 +593,6 @@ export default function DeadlineDetailPage() {
                             }
                           />
 
-                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm">
-                            <Upload size={18} />
-                            <span>
-                              {editFile
-                                ? editFile.name
-                                : payment.receipt_path
-                                  ? "Sostituisci ricevuta"
-                                  : "Aggiungi ricevuta"}
-                            </span>
-                            <input
-                              className="hidden"
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                              onChange={(e) =>
-                                setEditFile(e.target.files?.[0] ?? null)
-                              }
-                            />
-                          </label>
-
                           <div className="flex flex-wrap gap-2">
                             <button
                               className="button-primary"
@@ -715,15 +623,6 @@ export default function DeadlineDetailPage() {
                           </div>
 
                           <div className="flex flex-wrap gap-2">
-                            {payment.receipt_path && (
-                              <button
-                                className="button-secondary"
-                                onClick={() => openReceipt(payment.receipt_path!)}
-                              >
-                                <FileText size={18} /> Apri ricevuta
-                              </button>
-                            )}
-
                             <button
                               className="button-secondary"
                               onClick={() => startEditing(payment)}
@@ -742,6 +641,7 @@ export default function DeadlineDetailPage() {
                           </div>
                         </div>
                       )}
+                      {payment.occurrence_id && <AttachmentPanel key={documentsVersion} deadlineId={params.id} occurrenceId={payment.occurrence_id} paymentId={payment.id} title="Documenti del pagamento" disabled={saving} />}
                     </div>
                   );
                 })}

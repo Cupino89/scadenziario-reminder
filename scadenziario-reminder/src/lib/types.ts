@@ -42,3 +42,19 @@ export type Payment = {
   created_at: string;
   updated_at: string;
 };
+
+export type Attachment = {
+  id: string;
+  user_id: string;
+  deadline_id: string;
+  occurrence_id: string;
+  payment_id: string | null;
+  storage_path: string;
+  display_name: string;
+  document_type: string;
+  description: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+  updated_at: string;
+};

@@ -10,6 +10,7 @@ import type { Payment } from "@/lib/types";
 import { formatCurrency, formatDateIT } from "@/lib/date";
 
 type PaymentWithDeadline = Payment & {
+  attachments: { id: string }[];
   deadlines: { id: string; title: string; category: string } | null;
 };
 
@@ -21,7 +22,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     supabase
       .from("payments")
-      .select("*, deadlines(id,title,category)")
+      .select("*, deadlines(id,title,category), attachments(id)")
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) setMessage(error.message);
@@ -29,20 +30,6 @@ export default function PaymentsPage() {
         setLoading(false);
       });
   }, []);
-
-  async function openReceipt(path: string) {
-    setMessage("");
-    const { data, error } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(path, 300);
-
-    if (error) {
-      setMessage(`Impossibile aprire la ricevuta: ${error.message}`);
-      return;
-    }
-
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  }
 
   return (
     <AuthGuard>
@@ -85,15 +72,9 @@ export default function PaymentsPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <p className="font-bold">{formatCurrency(payment.amount_paid)}</p>
 
-                {payment.receipt_path && (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => openReceipt(payment.receipt_path!)}
-                  >
-                    <FileText size={18} /> Apri ricevuta
-                  </button>
-                )}
+                <Link className="button-secondary" href={`/deadlines/${payment.deadline_id}#payment-${payment.id}`}>
+                  <FileText size={18} /> Documenti ({payment.attachments?.length ?? 0})
+                </Link>
               </div>
             </div>
           ))}
