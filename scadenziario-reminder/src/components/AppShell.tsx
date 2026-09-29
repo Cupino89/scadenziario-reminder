@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, CreditCard, LogOut, PlusCircle } from "lucide-react";
+import { CalendarDays, CreditCard, LogOut, PlusCircle, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -18,6 +18,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Dashboard", icon: CalendarDays },
     { href: "/deadlines/new", label: "Nuova scadenza", icon: PlusCircle },
     { href: "/payments", label: "Pagamenti", icon: CreditCard },
+    { href: "/entities", label: "Persone e beni", icon: Users },
   ];
 
   return (
@@ -58,3 +59,4 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
