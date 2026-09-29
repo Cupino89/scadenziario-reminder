@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("open");
 
   useEffect(() => {
-    supabase.from("deadlines").select("*").order("due_date", { ascending: true }).then(({ data }) => {
+    supabase.from("deadlines").select("*, entities(id,name,entity_type)").order("due_date", { ascending: true }).then(({ data }) => {
       setDeadlines((data ?? []) as Deadline[]);
       setLoading(false);
     });
@@ -77,7 +77,7 @@ export default function DashboardPage() {
         <div className="mt-4 divide-y divide-slate-100">
           {loading && <p className="py-6 text-slate-500">Caricamento…</p>}
           {!loading && filtered.length === 0 && <p className="py-6 text-slate-500">Nessuna scadenza trovata.</p>}
-          {filtered.map((deadline) => { const badge = getVisualStatus(deadline); return <Link key={deadline.id} href={`/deadlines/${deadline.id}`} className="flex flex-col gap-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-2"><div><p className="font-semibold">{deadline.title}</p><p className="text-sm text-slate-500">{deadline.category} · {formatDateIT(deadline.due_date)} · {formatCurrency(deadline.amount_expected)}</p></div><span className={`w-fit rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}>{badge.label}</span></Link>; })}
+          {filtered.map((deadline) => { const badge = getVisualStatus(deadline); return <Link key={deadline.id} href={`/deadlines/${deadline.id}`} className="flex flex-col gap-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-2"><div><p className="font-semibold">{deadline.title}</p><p className="text-sm text-slate-500">{deadline.category} · {formatDateIT(deadline.due_date)} · {formatCurrency(deadline.amount_expected)}{(deadline as Deadline & {entities?: {name:string}|null}).entities?.name ? ` · ${(deadline as Deadline & {entities?: {name:string}|null}).entities?.name}` : ""}</p></div><span className={`w-fit rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}>{badge.label}</span></Link>; })}
         </div>
       </div>
     </AppShell></AuthGuard>
