@@ -539,7 +539,6 @@ export default function DeadlineDetailPage() {
                           </>
                         )}
                       </div>
-                      <AttachmentPanel key={documentsVersion} deadlineId={params.id} occurrenceId={occurrence.id} title="Documenti dell’occorrenza" disabled={saving} />
                     </div>
                   );
                 })}
