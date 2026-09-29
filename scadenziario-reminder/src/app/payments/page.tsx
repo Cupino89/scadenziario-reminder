@@ -12,6 +12,7 @@ import { formatCurrency, formatDateIT } from "@/lib/date";
 type PaymentWithDeadline = Payment & {
   attachments: { id: string }[];
   deadlines: { id: string; title: string; category: string } | null;
+  entities: { name: string } | null;
 };
 
 export default function PaymentsPage() {
@@ -22,7 +23,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     supabase
       .from("payments")
-      .select("*, deadlines(id,title,category), attachments(id)")
+      .select("*, deadlines(id,title,category,entities(name)), attachments(id)")
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) setMessage(error.message);
@@ -64,7 +65,7 @@ export default function PaymentsPage() {
                 )}
 
                 <p className="text-sm text-slate-500">
-                  {payment.deadlines?.category ?? "—"} · {formatDateIT(payment.paid_at)}
+                  {payment.deadlines?.category ?? "—"}{payment.entities?.name ? ` · ${payment.entities.name}` : ""} · {formatDateIT(payment.paid_at)}
                   {payment.note ? ` · ${payment.note}` : ""}
                 </p>
               </div>
