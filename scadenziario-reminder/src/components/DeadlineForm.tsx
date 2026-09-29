@@ -14,6 +14,8 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
     category: initial?.category ?? "Tasse",
     due_date: initial?.due_date ?? "",
     recurrence: initial?.recurrence ?? "none",
+    recurrence_interval: initial?.recurrence_interval?.toString() ?? "1",
+    recurrence_unit: initial?.recurrence_unit ?? "months",
     amount_expected: initial?.amount_expected?.toString() ?? "",
     notes: initial?.notes ?? "",
     reminder_days: initial?.reminder_days?.join(",") ?? "14,3,1",
@@ -38,12 +40,20 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
       return;
     }
 
+    if (form.recurrence === "custom" && (!Number(form.recurrence_interval) || Number(form.recurrence_interval) <= 0)) {
+      setMessage("Inserisci un intervallo personalizzato valido.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       user_id: auth.user.id,
       title: form.title.trim(),
       category: form.category,
       due_date: form.due_date,
       recurrence: form.recurrence,
+      recurrence_interval: form.recurrence === "custom" ? Number(form.recurrence_interval) : null,
+      recurrence_unit: form.recurrence === "custom" ? form.recurrence_unit : null,
       amount_expected: form.amount_expected ? Number(form.amount_expected.replace(",", ".")) : null,
       notes: form.notes.trim() || null,
       reminder_days: form.reminder_days
@@ -74,14 +84,17 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
         <Field label="Titolo">
           <input className="input" value={form.title} onChange={(e) => update("title", e.target.value)} required />
         </Field>
+
         <Field label="Categoria">
           <select className="input" value={form.category} onChange={(e) => update("category", e.target.value)}>
             {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
         </Field>
+
         <Field label="Data scadenza">
           <input className="input" type="date" value={form.due_date} onChange={(e) => update("due_date", e.target.value)} required />
         </Field>
+
         <Field label="Ricorrenza">
           <select className="input" value={form.recurrence} onChange={(e) => update("recurrence", e.target.value)}>
             <option value="none">Una tantum</option>
@@ -89,11 +102,38 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
             <option value="quarterly">Trimestrale</option>
             <option value="semiannual">Semestrale</option>
             <option value="yearly">Annuale</option>
+            <option value="custom">Personalizzata</option>
           </select>
         </Field>
+
+        {form.recurrence === "custom" && (
+          <>
+            <Field label="Ogni">
+              <input
+                className="input"
+                type="number"
+                min="1"
+                value={form.recurrence_interval}
+                onChange={(e) => update("recurrence_interval", e.target.value)}
+                required
+              />
+            </Field>
+
+            <Field label="Unità">
+              <select className="input" value={form.recurrence_unit} onChange={(e) => update("recurrence_unit", e.target.value)}>
+                <option value="days">Giorni</option>
+                <option value="weeks">Settimane</option>
+                <option value="months">Mesi</option>
+                <option value="years">Anni</option>
+              </select>
+            </Field>
+          </>
+        )}
+
         <Field label="Importo previsto">
           <input className="input" inputMode="decimal" value={form.amount_expected} onChange={(e) => update("amount_expected", e.target.value)} placeholder="Es. 250,00" />
         </Field>
+
         <Field label="Promemoria, giorni prima">
           <input className="input" value={form.reminder_days} onChange={(e) => update("reminder_days", e.target.value)} placeholder="14,3,1" />
         </Field>
