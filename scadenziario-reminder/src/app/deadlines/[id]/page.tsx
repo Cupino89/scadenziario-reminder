@@ -315,6 +315,68 @@ export default function DeadlineDetailPage() {
     await load();
   }
 
+
+  async function restoreSkippedOccurrence(occurrence: DeadlineOccurrence) {
+    if (!window.confirm("Ripristinare questa occorrenza? La successiva creata dal salto verrà rimossa.")) return;
+
+    setSaving(true);
+    setMessage("");
+
+    const { data, error } = await supabase.rpc("restore_skipped_occurrence", {
+      p_occurrence_id: occurrence.id,
+    });
+
+    if (error) {
+      setMessage(`Errore ripristino: ${error.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    setMessage(
+      result?.restored_due_date
+        ? `Occorrenza ripristinata: ${formatDateIT(result.restored_due_date)}.`
+        : "Occorrenza ripristinata."
+    );
+    setSaving(false);
+    await load();
+  }
+
+  async function markSkippedPaid(occurrence: DeadlineOccurrence) {
+    const paidAt = window.prompt(
+      "Data pagamento (AAAA-MM-GG):",
+      new Date().toISOString().slice(0, 10)
+    );
+    if (!paidAt) return;
+
+    const amountInput = window.prompt("Importo pagato (facoltativo):", "");
+    if (amountInput === null) return;
+
+    const note = window.prompt("Nota (facoltativa):", "") ?? "";
+
+    setSaving(true);
+    setMessage("");
+
+    const { error } = await supabase.rpc("mark_skipped_occurrence_paid", {
+      p_occurrence_id: occurrence.id,
+      p_paid_at: paidAt,
+      p_amount_paid: amountInput.trim()
+        ? Number(amountInput.replace(",", "."))
+        : null,
+      p_note: note.trim() || null,
+    });
+
+    if (error) {
+      setMessage(`Errore correzione: ${error.message}`);
+      setSaving(false);
+      return;
+    }
+
+    setMessage("Occorrenza corretta come pagata.");
+    setSaving(false);
+    await load();
+  }
+
   async function openReceipt(path: string) {
     const { data, error } = await supabase.storage
       .from("receipts")
@@ -519,14 +581,38 @@ export default function DeadlineDetailPage() {
                   return (
                     <div
                       key={occurrence.id}
-                      className="flex items-center justify-between gap-3 py-3"
+                      className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <span className="font-medium">{formatDateIT(occurrence.due_date)}</span>
-                      <span
-                        className={`rounded-full px-3 py-1 text-sm font-medium ${classes[occurrence.status] ?? "bg-slate-100 text-slate-700"}`}
-                      >
-                        {labels[occurrence.status] ?? occurrence.status}
-                      </span>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-sm font-medium ${classes[occurrence.status] ?? "bg-slate-100 text-slate-700"}`}
+                        >
+                          {labels[occurrence.status] ?? occurrence.status}
+                        </span>
+
+                        {occurrence.status === "skipped" && (
+                          <>
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              onClick={() => restoreSkippedOccurrence(occurrence)}
+                              disabled={saving}
+                            >
+                              <RotateCcw size={16} /> Ripristina
+                            </button>
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              onClick={() => markSkippedPaid(occurrence)}
+                              disabled={saving}
+                            >
+                              <Save size={16} /> Segna come pagata
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
