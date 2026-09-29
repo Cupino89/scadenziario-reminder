@@ -11,13 +11,14 @@ import {
   Save,
   Trash2,
   Upload,
+  SkipForward,
   X,
   XCircle,
 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/lib/supabase";
-import type { Deadline, DeadlineStatus, Payment } from "@/lib/types";
+import type { Deadline, DeadlineOccurrence, DeadlineStatus, Payment } from "@/lib/types";
 import { daysUntil, formatCurrency, formatDateIT } from "@/lib/date";
 
 function getStatusLabel(deadline: Deadline): string {
@@ -43,6 +44,7 @@ export default function DeadlineDetailPage() {
 
   const [deadline, setDeadline] = useState<Deadline | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [occurrences, setOccurrences] = useState<DeadlineOccurrence[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [paymentForm, setPaymentForm] = useState({
@@ -62,17 +64,23 @@ export default function DeadlineDetailPage() {
   async function load() {
     setLoading(true);
 
-    const [d, p] = await Promise.all([
+    const [d, p, o] = await Promise.all([
       supabase.from("deadlines").select("*").eq("id", params.id).single(),
       supabase
         .from("payments")
         .select("*")
         .eq("deadline_id", params.id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("deadline_occurrences")
+        .select("*")
+        .eq("deadline_id", params.id)
+        .order("due_date", { ascending: false }),
     ]);
 
     if (!d.error) setDeadline(d.data as Deadline);
     if (!p.error) setPayments((p.data ?? []) as Payment[]);
+    if (!o.error) setOccurrences((o.data ?? []) as DeadlineOccurrence[]);
 
     setLoading(false);
   }
@@ -279,6 +287,34 @@ export default function DeadlineDetailPage() {
     }
   }
 
+
+  async function skipOccurrence() {
+    if (!deadline || deadline.recurrence === "none") return;
+    if (!window.confirm("Saltare questa occorrenza e passare automaticamente alla successiva?")) return;
+
+    setSaving(true);
+    setMessage("");
+
+    const { data, error } = await supabase.rpc("skip_current_occurrence", {
+      p_deadline_id: deadline.id,
+    });
+
+    if (error) {
+      setMessage(`Errore: ${error.message}`);
+      setSaving(false);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    setMessage(
+      result?.next_due_date
+        ? `Occorrenza saltata. Prossima scadenza: ${formatDateIT(result.next_due_date)}.`
+        : "Occorrenza saltata."
+    );
+    setSaving(false);
+    await load();
+  }
+
   async function openReceipt(path: string) {
     const { data, error } = await supabase.storage
       .from("receipts")
@@ -343,6 +379,15 @@ export default function DeadlineDetailPage() {
                   >
                     <Ban size={18} /> Non applicabile
                   </button>
+                  {deadline.recurrence !== "none" && (
+                    <button
+                      className="button-secondary"
+                      onClick={skipOccurrence}
+                      disabled={saving}
+                    >
+                      <SkipForward size={18} /> Salta questa occorrenza
+                    </button>
+                  )}
                 </>
               ) : (
                 <button
@@ -444,6 +489,49 @@ export default function DeadlineDetailPage() {
             </div>
 
             {message && <p className="mt-4 text-sm text-slate-600">{message}</p>}
+
+
+            <div className="card mt-6 p-5">
+              <h2 className="text-lg font-bold">Storico occorrenze</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Ogni riga rappresenta una singola scadenza della serie.
+              </p>
+
+              <div className="mt-3 divide-y divide-slate-100">
+                {occurrences.length === 0 && (
+                  <p className="py-5 text-slate-500">Nessuna occorrenza disponibile.</p>
+                )}
+
+                {occurrences.map((occurrence) => {
+                  const labels: Record<string, string> = {
+                    open: "Da gestire",
+                    paid: "Pagata",
+                    skipped: "Saltata",
+                    cancelled: "Annullata",
+                  };
+                  const classes: Record<string, string> = {
+                    open: "bg-slate-100 text-slate-700",
+                    paid: "bg-emerald-100 text-emerald-700",
+                    skipped: "bg-amber-100 text-amber-700",
+                    cancelled: "bg-slate-200 text-slate-600",
+                  };
+
+                  return (
+                    <div
+                      key={occurrence.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <span className="font-medium">{formatDateIT(occurrence.due_date)}</span>
+                      <span
+                        className={`rounded-full px-3 py-1 text-sm font-medium ${classes[occurrence.status] ?? "bg-slate-100 text-slate-700"}`}
+                      >
+                        {labels[occurrence.status] ?? occurrence.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="card mt-6 p-5">
               <h2 className="text-lg font-bold">Storico pagamenti</h2>
