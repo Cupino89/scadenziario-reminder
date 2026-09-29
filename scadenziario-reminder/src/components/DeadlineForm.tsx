@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { Deadline } from "@/lib/types";
+import type { Deadline, Entity } from "@/lib/types";
 
 const categories = ["Tasse", "Auto", "Casa", "Assicurazioni", "Documenti", "Utenze", "Altro"];
 
@@ -20,9 +20,12 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
     notes: initial?.notes ?? "",
     reminder_days: initial?.reminder_days?.join(",") ?? "14,3,1",
     is_active: initial?.is_active ?? true,
+    entity_id: initial?.entity_id ?? "",
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  useEffect(() => { supabase.from("entities").select("*").order("name").then(({data}) => setEntities((data ?? []) as Entity[])); }, []);
 
   function update(name: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -61,6 +64,7 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
         .map((n) => Number(n.trim()))
         .filter((n) => Number.isFinite(n)),
       is_active: form.is_active,
+      entity_id: form.entity_id || null,
     };
 
     const result = initial
@@ -89,6 +93,14 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
           <select className="input" value={form.category} onChange={(e) => update("category", e.target.value)}>
             {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
+        </Field>
+
+        <Field label="Collegata a (facoltativo)">
+          <select className="input" value={form.entity_id} onChange={(e) => update("entity_id", e.target.value)}>
+            <option value="">Nessuna associazione</option>
+            {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          {entities.length === 0 && <span className="mt-1 block text-xs text-slate-500">Puoi aggiungere persone, immobili e veicoli dalle impostazioni quando la gestione sarà disponibile.</span>}
         </Field>
 
         <Field label="Data scadenza">
@@ -166,3 +178,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
+
