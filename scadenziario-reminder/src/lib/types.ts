@@ -1,5 +1,7 @@
 export type DeadlineStatus = "open" | "paid" | "cancelled" | "not_applicable";
 
+export type OccurrenceStatus = "open" | "paid" | "skipped" | "cancelled";
+
 export type Deadline = {
   id: string;
   user_id: string;
@@ -7,6 +9,8 @@ export type Deadline = {
   category: string;
   due_date: string;
   recurrence: string;
+  recurrence_interval: number | null;
+  recurrence_unit: "days" | "weeks" | "months" | "years" | null;
   amount_expected: number | null;
   notes: string | null;
   reminder_days: number[];
@@ -15,9 +19,20 @@ export type Deadline = {
   created_at: string;
 };
 
+export type DeadlineOccurrence = {
+  id: string;
+  deadline_id: string;
+  due_date: string;
+  status: OccurrenceStatus;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Payment = {
   id: string;
   deadline_id: string;
+  occurrence_id: string | null;
+  generated_occurrence_id: string | null;
   paid_at: string;
   amount_paid: number | null;
   note: string | null;
