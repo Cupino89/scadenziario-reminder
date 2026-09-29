@@ -22,5 +22,8 @@ export type Payment = {
   amount_paid: number | null;
   note: string | null;
   receipt_path: string | null;
+  deadline_due_date_before: string | null;
+  deadline_status_before: DeadlineStatus | null;
   created_at: string;
+  updated_at: string;
 };
