@@ -21,6 +21,8 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
     reminder_days: initial?.reminder_days?.join(",") ?? "14,3,1",
     is_active: initial?.is_active ?? true,
     entity_id: initial?.entity_id ?? "",
+    owner_id: (initial as Deadline & { owner_id?: string | null })?.owner_id ?? "",
+    asset_id: (initial as Deadline & { asset_id?: string | null })?.asset_id ?? "",
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +66,9 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
         .map((n) => Number(n.trim()))
         .filter((n) => Number.isFinite(n)),
       is_active: form.is_active,
-      entity_id: form.entity_id || null,
+      entity_id: form.asset_id || form.owner_id || null,
+      owner_id: form.owner_id || null,
+      asset_id: form.asset_id || null,
     };
 
     const result = initial
@@ -95,12 +99,19 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
           </select>
         </Field>
 
-        <Field label="Collegata a (facoltativo)">
-          <select className="input" value={form.entity_id} onChange={(e) => update("entity_id", e.target.value)}>
-            <option value="">Nessuna associazione</option>
-            {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        <Field label="Proprietario (facoltativo)">
+          <select className="input" value={form.owner_id} onChange={(e) => update("owner_id", e.target.value)}>
+            <option value="">Nessun proprietario</option>
+            {entities.filter((e) => e.entity_type === "person").map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
-          {entities.length === 0 && <span className="mt-1 block text-xs text-slate-500">Puoi aggiungere persone, immobili e veicoli dalla sezione Persone e beni.</span>}
+        </Field>
+
+        <Field label="Bene collegato (facoltativo)">
+          <select className="input" value={form.asset_id} onChange={(e) => update("asset_id", e.target.value)}>
+            <option value="">Nessun bene</option>
+            {entities.filter((e) => e.entity_type !== "person").map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+          {entities.length === 0 && <span className="mt-1 block text-xs text-slate-500">Puoi aggiungere persone e beni dalla sezione Persone e beni.</span>}
         </Field>
 
         <Field label="Data scadenza">

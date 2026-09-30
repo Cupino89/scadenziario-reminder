@@ -20,6 +20,8 @@ export type Deadline = {
   status: DeadlineStatus;
   created_at: string;
   entity_id: string | null;
+  owner_id: string | null;
+  asset_id: string | null;
 };
 
 export type Entity = { id:string; user_id:string; name:string; entity_type:"person"|"property"|"vehicle"|"organization"|"contract"|"other"; description:string|null; created_at:string; updated_at:string; };
