@@ -1,0 +1,1 @@
+Owner and linked asset fields are independent.\n
