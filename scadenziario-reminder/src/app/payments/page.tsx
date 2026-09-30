@@ -22,7 +22,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     supabase
       .from("payments")
-      .select("*, deadlines!inner(id,title,category,entities(name)), attachments(id)")
+      .select("*, deadlines!inner(id,title,category,entities:entities!deadlines_entity_id_fkey(name)), attachments(id)")
       .is("deadlines.deleted_at", null)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {

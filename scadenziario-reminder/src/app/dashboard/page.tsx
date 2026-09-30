@@ -43,8 +43,8 @@ export default function DashboardPage() {
     setMessage("");
     try {
       const [d, p, a, e] = await Promise.all([
-        readPages<DashboardDeadline>((from, to) => supabase.from('deadlines').select('*, entities(name)').is('deleted_at', null).order('due_date').order('id').range(from, to)),
-        readPages<DashboardPayment>((from, to) => supabase.from('payments').select('*, deadlines!inner(*, entities(name))').is('deadlines.deleted_at', null).order('paid_at', { ascending: false }).order('id').range(from, to)),
+        readPages<DashboardDeadline>((from, to) => supabase.from('deadlines').select('*, entities:entities!deadlines_entity_id_fkey(name)').is('deleted_at', null).order('due_date').order('id').range(from, to)),
+        readPages<DashboardPayment>((from, to) => supabase.from('payments').select('*, deadlines!inner(*, entities:entities!deadlines_entity_id_fkey(name))').is('deadlines.deleted_at', null).order('paid_at', { ascending: false }).order('id').range(from, to)),
         readPages<Pick<Attachment, 'payment_id' | 'document_type'>>((from, to) => supabase.from('attachments').select('payment_id, document_type').order('id').range(from, to)),
         readPages<Entity>((from, to) => supabase.from('entities').select('*').order('name').order('id').range(from, to)),
       ]);
