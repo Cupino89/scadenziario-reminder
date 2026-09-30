@@ -1,89 +1,129 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, CalendarDays, Search, WalletCards } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/lib/supabase";
-import type { Deadline } from "@/lib/types";
-import { daysUntil, formatCurrency, formatDateIT } from "@/lib/date";
+import type { Attachment, Entity } from "@/lib/types";
+import { formatCurrency, formatDateIT } from "@/lib/date";
+import { dayDifference, isPaymentProof, matchesDeadline, recent, romeToday, upcoming, type DashboardDeadline, type DashboardPayment } from "@/lib/dashboard";
 
-function getVisualStatus(deadline: Deadline) {
-  if (deadline.status === "paid") return { label: "Pagata", className: "bg-emerald-100 text-emerald-700" };
-  if (deadline.status === "cancelled") return { label: "Annullata", className: "bg-slate-200 text-slate-700" };
-  if (deadline.status === "not_applicable") return { label: "Non applicabile", className: "bg-violet-100 text-violet-700" };
-  const days = daysUntil(deadline.due_date);
-  if (days < 0) return { label: `Scaduta da ${Math.abs(days)}g`, className: "bg-red-100 text-red-700" };
-  if (days === 0) return { label: "Oggi", className: "bg-red-100 text-red-700" };
-  if (days <= 7) return { label: `Tra ${days}g`, className: "bg-amber-100 text-amber-700" };
-  return { label: `Tra ${days}g`, className: "bg-slate-100 text-slate-700" };
+// Fetch every page, rather than silently calculating totals on the API's first 1000 rows.
+async function readPages<T>(request: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += 500) {
+    const { data, error } = await request(from, from + 499);
+    if (error) throw new Error(error.message);
+    rows.push(...(data ?? []) as T[]);
+    if (!data || data.length < 500) return rows;
+  }
 }
 
 export default function DashboardPage() {
-  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
+  const [payments, setPayments] = useState<DashboardPayment[]>([]);
+  const [attachments, setAttachments] = useState<Pick<Attachment, 'payment_id' | 'document_type'>[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [message, setMessage] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("Tutte");
+  const [category, setCategory] = useState("");
+  const [entity, setEntity] = useState("");
   const [range, setRange] = useState("90");
-  const [status, setStatus] = useState("open");
+  const [view, setView] = useState("open");
+  const today = romeToday();
 
-  useEffect(() => {
-    supabase.from("deadlines").select("*, entities(id,name,entity_type)").order("due_date", { ascending: true }).then(({ data }) => {
-      setDeadlines((data ?? []) as Deadline[]);
-      setLoading(false);
-    });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    setMessage("");
+    try {
+      const [d, p, a, e] = await Promise.all([
+        readPages<DashboardDeadline>((from, to) => supabase.from('deadlines').select('*, entities(name)').order('due_date').order('id').range(from, to)),
+        readPages<DashboardPayment>((from, to) => supabase.from('payments').select('*, deadlines(*, entities(name))').order('paid_at', { ascending: false }).order('id').range(from, to)),
+        readPages<Pick<Attachment, 'payment_id' | 'document_type'>>((from, to) => supabase.from('attachments').select('payment_id, document_type').order('id').range(from, to)),
+        readPages<Entity>((from, to) => supabase.from('entities').select('*').order('name').order('id').range(from, to)),
+      ]);
+      setDeadlines(d); setPayments(p); setAttachments(a); setEntities(e);
+    } catch (error) {
+      setLoadFailed(true);
+      setMessage(`Caricamento non riuscito: ${error instanceof Error ? error.message : 'riprova.'}`);
+    } finally { setLoading(false); }
   }, []);
+  useEffect(() => { void load(); }, [load]);
 
-  const categories = useMemo(() => ["Tutte", ...Array.from(new Set(deadlines.map((d) => d.category))).sort()], [deadlines]);
+  const proofIds = useMemo(() => new Set(attachments.filter(a => a.payment_id && isPaymentProof(a.document_type)).map(a => a.payment_id)), [attachments]);
+  const categories = useMemo(() => Array.from(new Set(deadlines.map(d => d.category))).sort(), [deadlines]);
+  const selected = deadlines.filter(d => matchesDeadline(d, query, category, entity));
+  const open = selected.filter(d => d.status === 'open' && upcoming(d.due_date, today, range));
+  const paid = payments.filter(p => p.deadlines && matchesDeadline(p.deadlines, query, category, entity) && recent(p.paid_at, today, range));
+  const missing = paid.filter(p => !proofIds.has(p.id) && !p.receipt_path);
+  const paymentView = view === 'paid' || view === 'missing';
+  const shownPayments = view === 'missing' ? missing : paid;
+  const shownDeadlines = selected.filter(d => {
+    if (view === 'overdue') return d.status === 'open' && dayDifference(d.due_date, today) < 0;
+    if (view === 'upcoming') return d.status === 'open' && dayDifference(d.due_date, today) >= 0 && upcoming(d.due_date, today, range);
+    return (view === 'all' || d.status === view) && upcoming(d.due_date, today, range);
+  });
 
-  const filtered = useMemo(() => deadlines.filter((d) => {
-    const diff = daysUntil(d.due_date);
-    return `${d.title} ${d.category}`.toLowerCase().includes(query.toLowerCase())
-      && (category === "Tutte" || d.category === category)
-      && (range === "tutte" || d.status !== "open" || diff <= Number(range))
-      && (status === "tutte" || d.status === status);
-  }), [deadlines, query, category, range, status]);
+  async function removeDeadline(deadline: DashboardDeadline) {
+    if (deleting) return;
+    if (!window.confirm(`Eliminare definitivamente “${deadline.title}”? Per una scadenza ricorrente verrà eliminata l'intera serie. L'operazione è consentita solo se non ci sono pagamenti o documenti collegati.`)) return;
+    setDeleting(deadline.id); setMessage('');
+    try {
+      const { data, error } = await supabase.from('deadlines').delete().eq('id', deadline.id).select('id');
+      if (error) throw new Error(error.code === '23503' ? 'Questa scadenza ha pagamenti o documenti collegati. Puoi modificarla o annullarla dal dettaglio, conservando lo storico.' : error.message);
+      if (!data?.length) throw new Error('Scadenza non eliminata: aggiorna la pagina e verifica la sessione.');
+      await load();
+      setMessage(`“${deadline.title}” eliminata.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Eliminazione non riuscita.'); }
+    finally { setDeleting(null); }
+  }
 
-  const stats = useMemo(() => {
-    const open = deadlines.filter((d) => d.status === "open");
-    return {
-      overdue: open.filter((d) => daysUntil(d.due_date) < 0).length,
-      seven: open.filter((d) => { const n = daysUntil(d.due_date); return n >= 0 && n <= 7; }).length,
-      thirty: open.filter((d) => { const n = daysUntil(d.due_date); return n >= 0 && n <= 30; }).length,
-      total: open.reduce((sum, d) => sum + (Number(d.amount_expected) || 0), 0),
-    };
-  }, [deadlines]);
-
-  return (
-    <AuthGuard><AppShell>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="text-3xl font-bold">Dashboard</h1><p className="text-slate-500">La situazione aggiornata delle tue scadenze.</p></div>
-        <Link href="/deadlines/new" className="button-primary">+ Nuova scadenza</Link>
+  return <AuthGuard><AppShell>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h1 className="text-3xl font-bold">Dashboard</h1><p className="text-slate-500">Scadenze da gestire e pagamenti, in un unico posto.</p></div>
+      <Link href="/deadlines/new" className="button-primary">+ Nuova scadenza</Link>
+    </div>
+    <div className="card mt-6 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+      <label className="text-sm">Cerca<input className="input mt-1" placeholder="Titolo, categoria, persona o bene" value={query} onChange={e => setQuery(e.target.value)} /></label>
+      <label className="text-sm">Categoria<select className="input mt-1" value={category} onChange={e => setCategory(e.target.value)}><option value="">Tutte le categorie</option>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
+      <label className="text-sm">Persona o bene<select className="input mt-1" value={entity} onChange={e => setEntity(e.target.value)}><option value="">Tutte le persone e beni</option><option value="unassigned">Senza collegamento</option>{entities.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
+      <label className="text-sm">Periodo<select className="input mt-1" value={range} onChange={e => setRange(e.target.value)}><option value="7">7 giorni</option><option value="30">30 giorni</option><option value="90">90 giorni</option><option value="all">Tutte le date</option></select></label>
+    </div>
+    <p className="mt-2 text-sm text-slate-500">Il periodo comprende le prossime scadenze (incluse le arretrate) e i pagamenti degli ultimi {range === 'all' ? 'periodi disponibili' : `${range} giorni, oggi compreso`}. I riepiloghi seguono i filtri qui sopra.</p>
+    {message && <div role="status" className="card mt-4 p-4">{message} <button className="underline" onClick={() => void load()} disabled={loading}>Aggiorna</button></div>}
+    {loading ? <p className="py-8" role="status">Caricamento…</p> : loadFailed ? null : <>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Scadute" value={String(open.filter(d => dayDifference(d.due_date, today) < 0).length)} onClick={() => setView('overdue')} />
+        <Metric label="Da gestire nel periodo" value={String(open.length)} onClick={() => setView('open')} />
+        <Metric label="Pagamenti nel periodo" value={String(paid.length)} onClick={() => setView('paid')} />
+        <Metric label="Pagamenti senza ricevuta" value={String(missing.length)} onClick={() => setView('missing')} />
       </div>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat icon={AlertTriangle} label="Scadute" value={String(stats.overdue)} />
-        <Stat icon={CalendarClock} label="Entro 7 giorni" value={String(stats.seven)} />
-        <Stat icon={CalendarDays} label="Entro 30 giorni" value={String(stats.thirty)} />
-        <Stat icon={WalletCards} label="Importo previsto" value={formatCurrency(stats.total)} />
+      <div className="card mt-4 grid gap-3 p-5 sm:grid-cols-2">
+        <div><p className="text-sm text-slate-500">Da pagare · prossime scadenze e arretrati</p><p className="text-2xl font-bold">{formatCurrency(open.reduce((sum, d) => sum + Number(d.amount_expected ?? 0), 0))}</p><p className="text-sm text-slate-500">{open.filter(d => d.amount_expected === null).length} scadenze senza importo. Solo scadenze già registrate, senza proiezioni delle ricorrenze.</p></div>
+        <div><p className="text-sm text-slate-500">Pagato · periodo passato selezionato</p><p className="text-2xl font-bold">{formatCurrency(paid.reduce((sum, p) => sum + Number(p.amount_paid ?? 0), 0))}</p><p className="text-sm text-slate-500">{paid.filter(p => p.amount_paid === null).length} pagamenti senza importo.</p></div>
       </div>
-      <div className="card mt-6 p-4">
-        <div className="grid gap-3 lg:grid-cols-[1fr_180px_150px_170px]">
-          <label className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input className="input pl-10" placeholder="Cerca IMU, assicurazione, 730…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
-          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>{categories.map((c) => <option key={c}>{c}</option>)}</select>
-          <select className="input" value={range} onChange={(e) => setRange(e.target.value)}><option value="7">7 giorni</option><option value="30">30 giorni</option><option value="90">90 giorni</option><option value="tutte">Tutte le date</option></select>
-          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}><option value="open">Da gestire</option><option value="paid">Pagate</option><option value="cancelled">Annullate</option><option value="not_applicable">Non applicabili</option><option value="tutte">Tutte</option></select>
+      <section className="card mt-5 p-4">
+        <label className="block max-w-sm text-sm">Mostra<select className="input mt-1" value={view} onChange={e => setView(e.target.value)}><option value="open">Da gestire</option><option value="overdue">Scadute</option><option value="upcoming">In scadenza</option><option value="paid">Pagamenti recenti</option><option value="missing">Pagamenti senza ricevuta</option><option value="cancelled">Annullate</option><option value="not_applicable">Non applicabili</option><option value="all">Tutte le scadenze</option></select></label>
+        {view === 'missing' && <p className="mt-3 text-sm text-slate-500">Pagamenti senza un documento classificato come ricevuta, quietanza o F24. Una fattura o un avviso non sono conteggiati come ricevuta.</p>}
+        <div className="mt-3 divide-y divide-slate-100">
+          {paymentView ? shownPayments.map(p => <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 py-4"><div><Link className="font-semibold hover:underline" href={`/deadlines/${p.deadline_id}#payment-${p.id}`}>{p.deadlines?.title}</Link><p className="text-sm text-slate-500">{p.deadlines?.category} · {p.deadlines?.entities?.name ?? 'Senza collegamento'} · Pagato il {formatDateIT(p.paid_at)}</p></div><div className="flex items-center gap-3"><strong>{formatCurrency(p.amount_paid)}</strong><Link className="button-secondary" href={`/deadlines/${p.deadline_id}#payment-${p.id}`}>{proofIds.has(p.id) || p.receipt_path ? 'Documenti' : 'Aggiungi ricevuta'}</Link></div></div>) : shownDeadlines.map(d => <div key={d.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><Link className="font-semibold hover:underline" href={`/deadlines/${d.id}`}>{d.title}</Link><p className="text-sm text-slate-500">{d.category} · {formatDateIT(d.due_date)} · {formatCurrency(d.amount_expected)}{d.entities?.name ? ` · ${d.entities.name}` : ''}</p><p className={`text-sm ${d.status === 'open' && dayDifference(d.due_date, today) < 0 ? 'text-red-700' : 'text-slate-500'}`}>{statusLabel(d, today)}</p></div><div className="flex shrink-0 gap-2"><Link className="button-secondary" href={`/deadlines/${d.id}/edit`} aria-label={`Modifica ${d.title}`}><Pencil size={16} /> Modifica</Link><button className="button-secondary text-red-700" aria-label={`Elimina ${d.title}`} disabled={deleting !== null} onClick={() => void removeDeadline(d)}><Trash2 size={16} />{deleting === d.id ? 'Eliminazione…' : 'Elimina'}</button></div></div>)}
+          {(paymentView ? shownPayments : shownDeadlines).length === 0 && <p className="py-6 text-slate-500">Nessun risultato con questi filtri.</p>}
         </div>
-        <div className="mt-4 divide-y divide-slate-100">
-          {loading && <p className="py-6 text-slate-500">Caricamento…</p>}
-          {!loading && filtered.length === 0 && <p className="py-6 text-slate-500">Nessuna scadenza trovata.</p>}
-          {filtered.map((deadline) => { const badge = getVisualStatus(deadline); return <Link key={deadline.id} href={`/deadlines/${deadline.id}`} className="flex flex-col gap-2 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-2"><div><p className="font-semibold">{deadline.title}</p><p className="text-sm text-slate-500">{deadline.category} · {formatDateIT(deadline.due_date)} · {formatCurrency(deadline.amount_expected)}{(deadline as Deadline & {entities?: {name:string}|null}).entities?.name ? ` · ${(deadline as Deadline & {entities?: {name:string}|null}).entities?.name}` : ""}</p></div><span className={`w-fit rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}>{badge.label}</span></Link>; })}
-        </div>
-      </div>
-    </AppShell></AuthGuard>
-  );
+      </section>
+    </>}
+  </AppShell></AuthGuard>;
 }
-
-function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
-  return <div className="card p-5"><Icon size={22} className="mb-4 text-slate-500" /><p className="text-sm text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></div>;
+function Metric({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
+  return <button onClick={onClick} className="card p-5 text-left hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"><p className="text-sm text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></button>;
+}
+function statusLabel(d: DashboardDeadline, today: string) {
+  if (d.status !== 'open') return { paid: 'Pagata', cancelled: 'Annullata', not_applicable: 'Non applicabile' }[d.status];
+  const days = dayDifference(d.due_date, today);
+  return days < 0 ? `Scaduta da ${-days} giorni` : days === 0 ? 'Scade oggi' : `Tra ${days} giorni`;
 }

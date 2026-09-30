@@ -100,7 +100,7 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
             <option value="">Nessuna associazione</option>
             {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
-          {entities.length === 0 && <span className="mt-1 block text-xs text-slate-500">Puoi aggiungere persone, immobili e veicoli dalle impostazioni quando la gestione sarà disponibile.</span>}
+          {entities.length === 0 && <span className="mt-1 block text-xs text-slate-500">Puoi aggiungere persone, immobili e veicoli dalla sezione Persone e beni.</span>}
         </Field>
 
         <Field label="Data scadenza">

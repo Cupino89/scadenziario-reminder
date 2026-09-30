@@ -11,8 +11,7 @@ import { formatCurrency, formatDateIT } from "@/lib/date";
 
 type PaymentWithDeadline = Payment & {
   attachments: { id: string }[];
-  deadlines: { id: string; title: string; category: string } | null;
-  entities: { name: string } | null;
+  deadlines: { id: string; title: string; category: string; entities: { name: string } | null } | null;
 };
 
 export default function PaymentsPage() {
@@ -65,7 +64,7 @@ export default function PaymentsPage() {
                 )}
 
                 <p className="text-sm text-slate-500">
-                  {payment.deadlines?.category ?? "—"}{payment.entities?.name ? ` · ${payment.entities.name}` : ""} · {formatDateIT(payment.paid_at)}
+                  {payment.deadlines?.category ?? "—"}{payment.deadlines?.entities?.name ? ` · ${payment.deadlines?.entities.name}` : ""} · {formatDateIT(payment.paid_at)}
                   {payment.note ? ` · ${payment.note}` : ""}
                 </p>
               </div>

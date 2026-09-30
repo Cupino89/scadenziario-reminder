@@ -314,11 +314,11 @@ export default function DeadlineDetailPage() {
   }
 
   async function removeDeadline() {
-    if (!window.confirm("Eliminare questa scadenza e lo storico collegato?")) return;
+    if (!window.confirm("Eliminare questa scadenza? L’eliminazione è consentita solo senza pagamenti o documenti collegati.")) return;
 
     const result = await supabase.from("deadlines").delete().eq("id", params.id);
 
-    if (result.error) setMessage(result.error.message);
+    if (result.error) setMessage(result.error.code === "23503" ? "Impossibile eliminare: ci sono pagamenti o documenti collegati. Puoi annullare la scadenza conservando lo storico." : result.error.message);
     else router.push("/dashboard");
   }
 
