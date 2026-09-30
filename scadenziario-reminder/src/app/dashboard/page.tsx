@@ -57,6 +57,10 @@ export default function DashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   const proofIds = useMemo(() => new Set(attachments.filter(a => a.payment_id && isPaymentProof(a.document_type)).map(a => a.payment_id)), [attachments]);
+  const people = entities.filter(e => e.entity_type === 'person');
+  const assets = entities.filter(e => e.entity_type !== 'person');
+  const personFilter = people.some(e => e.id === entity) ? entity : '';
+  const assetFilter = assets.some(e => e.id === entity) ? entity : '';
   const categories = useMemo(() => Array.from(new Set(deadlines.map(d => d.category))).sort(), [deadlines]);
   const selected = deadlines.filter(d => matchesDeadline(d, query, category, entity));
   const open = selected.filter(d => d.status === 'open' && upcoming(d.due_date, today, range));
@@ -89,12 +93,14 @@ export default function DashboardPage() {
       <div><h1 className="text-3xl font-bold">Dashboard</h1><p className="text-slate-500">Scadenze da gestire e pagamenti, in un unico posto.</p></div>
       <Link href="/deadlines/new" className="button-primary">+ Nuova scadenza</Link>
     </div>
-    <div className="card mt-6 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="card mt-6 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
       <label className="text-sm">Cerca<input className="input mt-1" placeholder="Titolo, categoria, persona o bene" value={query} onChange={e => setQuery(e.target.value)} /></label>
       <label className="text-sm">Categoria<select className="input mt-1" value={category} onChange={e => setCategory(e.target.value)}><option value="">Tutte le categorie</option>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
-      <label className="text-sm">Persona o bene<select className="input mt-1" value={entity} onChange={e => setEntity(e.target.value)}><option value="">Tutte le persone e beni</option><option value="unassigned">Senza collegamento</option>{entities.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
+      <label className="text-sm">Persona<select className="input mt-1" value={personFilter} onChange={e => setEntity(e.target.value || (personFilter ? '' : entity))}><option value="">Tutte le persone</option>{people.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
+      <label className="text-sm">Bene<select className="input mt-1" value={assetFilter} onChange={e => setEntity(e.target.value || (assetFilter ? '' : entity))}><option value="">Tutti i beni</option>{(['property', 'vehicle', 'organization', 'contract', 'other'] as const).map(type => { const items = assets.filter(e => e.entity_type === type); return items.length ? <optgroup key={type} label={{ property: 'Immobili', vehicle: 'Veicoli', organization: 'Organizzazioni', contract: 'Contratti', other: 'Altro' }[type]}>{items.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</optgroup> : null; })}</select></label>
       <label className="text-sm">Periodo<select className="input mt-1" value={range} onChange={e => setRange(e.target.value)}><option value="7">7 giorni</option><option value="30">30 giorni</option><option value="90">90 giorni</option><option value="all">Tutte le date</option></select></label>
     </div>
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500"><p>Filtra per una persona oppure per un bene: selezionando uno, l’altro filtro si azzera.</p><label className="flex items-center gap-2"><input type="checkbox" checked={entity === 'unassigned'} onChange={e => setEntity(e.target.checked ? 'unassigned' : '')} />Solo scadenze senza collegamento</label></div>
     <p className="mt-2 text-sm text-slate-500">Il periodo comprende le prossime scadenze (incluse le arretrate) e i pagamenti degli ultimi {range === 'all' ? 'periodi disponibili' : `${range} giorni, oggi compreso`}. I riepiloghi seguono i filtri qui sopra.</p>
     {message && <div role="status" className="card mt-4 p-4">{message} <button className="underline" onClick={() => void load()} disabled={loading}>Aggiorna</button></div>}
     {loading ? <p className="py-8" role="status">Caricamento…</p> : loadFailed ? null : <>
