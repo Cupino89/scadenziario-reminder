@@ -7,10 +7,11 @@ export function romeToday(now = new Date()) {
 export function dayDifference(date: string, today: string) {
   return Math.round((Date.parse(date + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000);
 }
-export function matchesDeadline(d: DashboardDeadline, query: string, category: string, entity: string) {
+export function matchesDeadline(d: DashboardDeadline, query: string, category: string, owner: string, asset: string) {
   return `${d.title} ${d.category} ${d.entities?.name ?? ''}`.toLocaleLowerCase('it').includes(query.trim().toLocaleLowerCase('it'))
     && (category === '' || d.category === category)
-    && (entity === '' || (entity === 'unassigned' ? !d.entity_id : d.entity_id === entity));
+    && (owner === '' || d.owner_id === owner)
+    && (asset === '' || d.asset_id === asset);
 }
 export function upcoming(date: string, today: string, range: string) {
   // Include overdue items so a period filter never hides unfinished obligations.
