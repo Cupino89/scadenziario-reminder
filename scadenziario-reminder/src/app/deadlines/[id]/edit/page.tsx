@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
 import AppShell from "@/components/AppShell";
@@ -21,7 +22,7 @@ export default function EditDeadlinePage() {
     <AuthGuard>
       <AppShell>
         <h1 className="text-3xl font-bold">Modifica scadenza</h1>
-        {deadline ? <DeadlineForm initial={deadline} /> : <p className="mt-6">Caricamento…</p>}
+        {deadline?.deleted_at ? <p className="mt-6">Questa scadenza è nel <Link className="underline" href="/trash">cestino</Link>. Ripristinala prima di modificarla.</p> : deadline ? <DeadlineForm initial={deadline} /> : <p className="mt-6">Caricamento…</p>}
       </AppShell>
     </AuthGuard>
   );

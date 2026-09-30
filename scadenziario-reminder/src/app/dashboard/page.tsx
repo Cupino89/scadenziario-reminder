@@ -43,8 +43,8 @@ export default function DashboardPage() {
     setMessage("");
     try {
       const [d, p, a, e] = await Promise.all([
-        readPages<DashboardDeadline>((from, to) => supabase.from('deadlines').select('*, entities(name)').order('due_date').order('id').range(from, to)),
-        readPages<DashboardPayment>((from, to) => supabase.from('payments').select('*, deadlines(*, entities(name))').order('paid_at', { ascending: false }).order('id').range(from, to)),
+        readPages<DashboardDeadline>((from, to) => supabase.from('deadlines').select('*, entities(name)').is('deleted_at', null).order('due_date').order('id').range(from, to)),
+        readPages<DashboardPayment>((from, to) => supabase.from('payments').select('*, deadlines!inner(*, entities(name))').is('deadlines.deleted_at', null).order('paid_at', { ascending: false }).order('id').range(from, to)),
         readPages<Pick<Attachment, 'payment_id' | 'document_type'>>((from, to) => supabase.from('attachments').select('payment_id, document_type').order('id').range(from, to)),
         readPages<Entity>((from, to) => supabase.from('entities').select('*').order('name').order('id').range(from, to)),
       ]);
@@ -76,14 +76,14 @@ export default function DashboardPage() {
 
   async function removeDeadline(deadline: DashboardDeadline) {
     if (deleting) return;
-    if (!window.confirm(`Eliminare definitivamente “${deadline.title}”? Per una scadenza ricorrente verrà eliminata l'intera serie. L'operazione è consentita solo se non ci sono pagamenti o documenti collegati.`)) return;
+    if (!window.confirm(`Spostare “${deadline.title}” nel cestino? Per una scadenza ricorrente verrà spostata l’intera serie. Potrai ripristinarla insieme a pagamenti e documenti; i promemoria saranno sospesi.`)) return;
     setDeleting(deadline.id); setMessage('');
     try {
-      const { data, error } = await supabase.from('deadlines').delete().eq('id', deadline.id).select('id');
-      if (error) throw new Error(error.code === '23503' ? 'Questa scadenza ha pagamenti o documenti collegati. Puoi modificarla o annullarla dal dettaglio, conservando lo storico.' : error.message);
-      if (!data?.length) throw new Error('Scadenza non eliminata: aggiorna la pagina e verifica la sessione.');
+      const { data, error } = await supabase.rpc('move_deadline_to_trash', { p_deadline_id: deadline.id });
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Scadenza non eliminata: aggiorna la pagina e verifica la sessione.');
       await load();
-      setMessage(`“${deadline.title}” eliminata.`);
+      setMessage(`“${deadline.title}” spostata nel cestino.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Eliminazione non riuscita.'); }
     finally { setDeleting(null); }
   }

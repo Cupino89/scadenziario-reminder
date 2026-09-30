@@ -68,7 +68,7 @@ export default function DeadlineForm({ initial }: { initial?: Deadline }) {
     };
 
     const result = initial
-      ? await supabase.from("deadlines").update(payload).eq("id", initial.id)
+      ? await supabase.from("deadlines").update(payload).eq("id", initial.id).is("deleted_at", null).select("id").single()
       : await supabase.from("deadlines").insert(payload).select("id").single();
 
     setSaving(false);

@@ -314,11 +314,11 @@ export default function DeadlineDetailPage() {
   }
 
   async function removeDeadline() {
-    if (!window.confirm("Eliminare questa scadenza? L’eliminazione è consentita solo senza pagamenti o documenti collegati.")) return;
+    if (!window.confirm("Spostare questa scadenza nel cestino? Lo storico e i documenti saranno conservati e potrai ripristinarla. I promemoria saranno sospesi.")) return;
 
-    const result = await supabase.from("deadlines").delete().eq("id", params.id);
+    const result = await supabase.rpc("move_deadline_to_trash", { p_deadline_id: params.id });
 
-    if (result.error) setMessage(result.error.code === "23503" ? "Impossibile eliminare: ci sono pagamenti o documenti collegati. Puoi annullare la scadenza conservando lo storico." : result.error.message);
+    if (result.error) setMessage(result.error.message);
     else router.push("/dashboard");
   }
 
@@ -328,7 +328,8 @@ export default function DeadlineDetailPage() {
         {loading && <p>Caricamento…</p>}
         {!loading && !deadline && <p>Scadenza non trovata.</p>}
 
-        {deadline && (
+        {deadline?.deleted_at && <div className="card p-5"><p>Questa scadenza è nel cestino. Ripristinala per consultare o modificare scadenza, pagamenti e documenti.</p><Link className="button-secondary mt-3" href="/trash">Apri cestino</Link></div>}
+        {deadline && !deadline.deleted_at && (
           <>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

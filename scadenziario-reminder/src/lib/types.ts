@@ -3,6 +3,8 @@ export type DeadlineStatus = "open" | "paid" | "cancelled" | "not_applicable";
 export type OccurrenceStatus = "open" | "paid" | "skipped" | "cancelled";
 
 export type Deadline = {
+  deleted_at: string | null;
+  status_before_trash: DeadlineStatus | null;
   id: string;
   user_id: string;
   title: string;
