@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, CreditCard, LogOut, PlusCircle, Users, Trash2, Bell } from "lucide-react";
+import { CalendarDays, CreditCard, LogOut, PlusCircle, Users, Trash2, Bell, Menu, X } from "lucide-react";
 import ReminderBanner from "@/components/ReminderBanner";
 import { supabase } from "@/lib/supabase";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuOpen = menuPath === pathname;
 
   async function logout() {
     await supabase.auth.signOut();
@@ -32,21 +35,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <img src="/icon.svg" alt="" className="h-9 w-9 rounded-xl" />
             <span>Scadenziario</span>
           </Link>
-          <button onClick={logout} className="button-secondary px-3 py-2">
+          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={menuOpen ? "Chiudi menu" : "Apri menu"}
+            aria-expanded={menuOpen}
+            aria-controls="app-navigation"
+            onClick={() => setMenuPath(menuOpen ? null : pathname)}
+            className="button-secondary min-h-11 px-3 py-2 md:hidden"
+          >
+            {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            <span className="hidden min-[380px]:inline">Menu</span>
+          </button>
+          <button onClick={logout} aria-label="Esci" className="button-secondary min-h-11 px-3 py-2">
             <LogOut size={18} /> <span className="hidden sm:inline">Esci</span>
           </button>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 md:grid-cols-[220px_1fr]">
-        <aside className="card h-fit p-3">
-          <nav className="grid gap-1 sm:grid-cols-3 md:grid-cols-1">
+        <aside id="app-navigation" className={`card h-fit p-3 ${menuOpen ? "" : "hidden"} md:block`}>
+          <nav aria-label="Navigazione principale" className="grid gap-1 sm:grid-cols-3 md:grid-cols-1">
             {nav.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <Link
                   key={href}
                   href={href}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setMenuPath(null)}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
                     active ? "bg-slate-900 text-white" : "hover:bg-slate-100"
                   }`}
@@ -57,7 +75,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
         </aside>
-        <section><ReminderBanner />{children}</section>
+        <section className="min-w-0"><ReminderBanner />{children}</section>
       </div>
     </div>
   );
