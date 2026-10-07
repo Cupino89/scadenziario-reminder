@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, CreditCard, LogOut, PlusCircle, Users, Trash2 } from "lucide-react";
+import { CalendarDays, CreditCard, LogOut, PlusCircle, Users, Trash2, Bell } from "lucide-react";
+import ReminderBanner from "@/components/ReminderBanner";
 import { supabase } from "@/lib/supabase";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/deadlines/new", label: "Nuova scadenza", icon: PlusCircle },
     { href: "/payments", label: "Pagamenti", icon: CreditCard },
     { href: "/entities", label: "Persone e beni", icon: Users },
+    { href: "/notifications", label: "Notifiche", icon: Bell },
     { href: "/trash", label: "Cestino", icon: Trash2 },
   ];
 
@@ -55,7 +57,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
         </aside>
-        <section>{children}</section>
+        <section><ReminderBanner />{children}</section>
       </div>
     </div>
   );

@@ -1,0 +1,40 @@
+begin;
+insert into auth.users(id) values ('10000000-0000-4000-8000-000000000021'),('10000000-0000-4000-8000-000000000022');
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000021',true);
+set local role authenticated;
+do $$
+declare d uuid; eid uuid; n integer; today date := (now() at time zone 'Europe/Rome')::date;
+begin
+ insert into public.deadlines(user_id,title,category,due_date,reminder_days) values(auth.uid(),'Reminder test','Test',today+3,array[3,3,1]) returning id into d;
+ perform public.refresh_my_reminders();
+ perform public.refresh_my_reminders();
+ select count(*) into n from public.reminder_events where deadline_id=d;
+ if n<>1 then raise exception 'Deduplication failed: %',n; end if;
+ select id into eid from public.active_reminders where deadline_id=d;
+ if eid is null then raise exception 'Reminder missing'; end if;
+ update public.reminder_events set read_at=now() where id=eid;
+ if exists(select 1 from public.active_reminders where id=eid and read_at is null) then raise exception 'Read update failed'; end if;
+ perform public.move_deadline_to_trash(d);
+ if exists(select 1 from public.active_reminders where id=eid) then raise exception 'Trash visible'; end if;
+ perform public.restore_deadline_from_trash(d);
+ if not exists(select 1 from public.active_reminders where id=eid) then raise exception 'Restore missing'; end if;
+ update public.deadlines set due_date=today+10 where id=d;
+ if exists(select 1 from public.active_reminders where id=eid) then raise exception 'Stale due date visible'; end if;
+ update public.deadlines set due_date=today+3 where id=d;
+ perform public.register_payment_atomic(d,today,10::numeric,null::text,null::text);
+ if exists(select 1 from public.active_reminders where id=eid) then raise exception 'Paid visible'; end if;
+ insert into public.notification_preferences(user_id,show_banner) values(auth.uid(),false);
+ perform set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000022',true);
+ if exists(select 1 from public.reminder_events where id=eid) then raise exception 'Cross user event visible'; end if;
+ if exists(select 1 from public.notification_preferences) then raise exception 'Cross user preferences visible'; end if;
+ update public.reminder_events set read_at=null where id=eid;
+ get diagnostics n = row_count;
+ if n<>0 then raise exception 'Cross user update allowed'; end if;
+ begin
+  insert into public.reminder_events(user_id,deadline_id,occurrence_id,due_date,remind_date,days_before) select auth.uid(),d,gen_random_uuid(),today,today,0;
+  raise exception 'Foreign event insert allowed';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+rollback;
+select 'PASS: deduplication, read state, trash/restore, changed date, paid exclusion, cross-user isolation' result;

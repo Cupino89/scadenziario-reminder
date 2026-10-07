@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
-  const [entity, setEntity] = useState("");
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState("");
   const [assetFilter, setAssetFilter] = useState("");
   const [range, setRange] = useState("90");
@@ -64,9 +64,9 @@ export default function DashboardPage() {
   const personFilter = ownerFilter;
   const assetFilterValue = assetFilter;
   const categories = useMemo(() => Array.from(new Set(deadlines.map(d => d.category))).sort(), [deadlines]);
-  const selected = deadlines.filter(d => matchesDeadline(d, query, category, ownerFilter, assetFilter));
+  const selected = deadlines.filter(d => matchesDeadline(d, query, category, ownerFilter, assetFilter) && (!unassignedOnly || (!d.owner_id && !d.asset_id)));
   const open = selected.filter(d => d.status === 'open' && upcoming(d.due_date, today, range));
-  const paid = payments.filter(p => p.deadlines && matchesDeadline(p.deadlines, query, category, ownerFilter, assetFilter) && recent(p.paid_at, today, range));
+  const paid = payments.filter(p => p.deadlines && matchesDeadline(p.deadlines, query, category, ownerFilter, assetFilter) && (!unassignedOnly || (!p.deadlines.owner_id && !p.deadlines.asset_id)) && recent(p.paid_at, today, range));
   const missing = paid.filter(p => !proofIds.has(p.id) && !p.receipt_path);
   const paymentView = view === 'paid' || view === 'missing';
   const shownPayments = view === 'missing' ? missing : paid;
@@ -98,11 +98,11 @@ export default function DashboardPage() {
     <div className="card mt-6 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
       <label className="text-sm">Cerca<input className="input mt-1" placeholder="Titolo, categoria, persona o bene" value={query} onChange={e => setQuery(e.target.value)} /></label>
       <label className="text-sm">Categoria<select className="input mt-1" value={category} onChange={e => setCategory(e.target.value)}><option value="">Tutte le categorie</option>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
-      <label className="text-sm">Persona<select className="input mt-1" value={personFilter} onChange={e => setOwnerFilter(e.target.value)}><option value="">Tutte le persone</option>{people.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
-      <label className="text-sm">Bene<select className="input mt-1" value={assetFilterValue} onChange={e => setAssetFilter(e.target.value)}><option value="">Tutti i beni</option>{(['property', 'vehicle', 'organization', 'contract', 'other'] as const).map(type => { const items = assets.filter(e => e.entity_type === type); return items.length ? <optgroup key={type} label={{ property: 'Immobili', vehicle: 'Veicoli', organization: 'Organizzazioni', contract: 'Contratti', other: 'Altro' }[type]}>{items.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</optgroup> : null; })}</select></label>
+      <label className="text-sm">Persona<select className="input mt-1" value={personFilter} onChange={e => {setOwnerFilter(e.target.value); setUnassignedOnly(false);}}><option value="">Tutte le persone</option>{people.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</select></label>
+      <label className="text-sm">Bene<select className="input mt-1" value={assetFilterValue} onChange={e => {setAssetFilter(e.target.value); setUnassignedOnly(false);}}><option value="">Tutti i beni</option>{(['property', 'vehicle', 'organization', 'contract', 'other'] as const).map(type => { const items = assets.filter(e => e.entity_type === type); return items.length ? <optgroup key={type} label={{ property: 'Immobili', vehicle: 'Veicoli', organization: 'Organizzazioni', contract: 'Contratti', other: 'Altro' }[type]}>{items.map(e => <option value={e.id} key={e.id}>{e.name}</option>)}</optgroup> : null; })}</select></label>
       <label className="text-sm">Periodo<select className="input mt-1" value={range} onChange={e => setRange(e.target.value)}><option value="7">7 giorni</option><option value="30">30 giorni</option><option value="90">90 giorni</option><option value="all">Tutte le date</option></select></label>
     </div>
-    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500"><p>Filtra per una persona oppure per un bene: selezionando uno, l’altro filtro si azzera.</p><label className="flex items-center gap-2"><input type="checkbox" checked={false} disabled />Solo scadenze senza collegamento</label></div>
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500"><p>Puoi combinare proprietario e bene per trovare le scadenze che corrispondono a entrambi.</p><label className="flex items-center gap-2"><input type="checkbox" checked={unassignedOnly} onChange={e => { setUnassignedOnly(e.target.checked); if(e.target.checked) {setOwnerFilter(""); setAssetFilter("");} }} />Solo scadenze senza collegamento</label></div>
     <p className="mt-2 text-sm text-slate-500">Il periodo comprende le prossime scadenze (incluse le arretrate) e i pagamenti degli ultimi {range === 'all' ? 'periodi disponibili' : `${range} giorni, oggi compreso`}. I riepiloghi seguono i filtri qui sopra.</p>
     {message && <div role="status" className="card mt-4 p-4">{message} <button className="underline" onClick={() => void load()} disabled={loading}>Aggiorna</button></div>}
     {loading ? <p className="py-8" role="status">Caricamento…</p> : loadFailed ? null : <>
