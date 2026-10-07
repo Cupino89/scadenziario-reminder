@@ -17,7 +17,7 @@ import {
 import AuthGuard from "@/components/AuthGuard";
 import AppShell from "@/components/AppShell";
 import AttachmentPanel from "@/components/AttachmentPanel";
-import { ACCEPT_DOCUMENTS, addDocument, documentError, validateDocument } from "@/lib/attachments";
+import { addDocument, documentError, validateDocument } from "@/lib/attachments";
 import { supabase } from "@/lib/supabase";
 import type { Deadline, DeadlineOccurrence, DeadlineStatus, Payment } from "@/lib/types";
 import { daysUntil, formatCurrency, formatDateIT } from "@/lib/date";
@@ -456,7 +456,7 @@ export default function DeadlineDetailPage() {
                         key={fileKey}
                         multiple
                         disabled={saving}
-                        accept={ACCEPT_DOCUMENTS}
+
                         onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                       />
                     </label>

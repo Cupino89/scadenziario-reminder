@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Paperclip, Download, Eye, Pencil, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Attachment } from "@/lib/types";
-import { ACCEPT_DOCUMENTS, DOCUMENT_TYPES, addDocument, documentError, documentUrl, uploadDocument, validateDocument } from "@/lib/attachments";
+import { DOCUMENT_TYPES, addDocument, documentError, documentUrl, uploadDocument, validateDocument } from "@/lib/attachments";
 
 export default function AttachmentPanel({ deadlineId, occurrenceId, paymentId = null, title = "Documenti", disabled = false }: {
   deadlineId: string; occurrenceId: string; paymentId?: string | null; title?: string; disabled?: boolean;
@@ -130,12 +130,12 @@ export default function AttachmentPanel({ deadlineId, occurrenceId, paymentId = 
       <label className="block text-sm">Nome documento<input className="input mt-1" maxLength={255} value={editing.display_name} onChange={e => setEditing({ ...editing, display_name: e.target.value })} disabled={locked} /></label>
       <label className="block text-sm">Tipo<select className="input mt-1" value={editing.document_type} onChange={e => setEditing({ ...editing, document_type: e.target.value })} disabled={locked}>{Object.entries(DOCUMENT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label className="block text-sm">Descrizione<textarea className="input mt-1" maxLength={2000} value={editing.description ?? ""} onChange={e => setEditing({ ...editing, description: e.target.value })} disabled={locked} /></label>
-      <label className="block text-sm">Sostituisci file (facoltativo)<input className="mt-1 block w-full text-sm" type="file" accept={ACCEPT_DOCUMENTS} disabled={locked} onChange={e => setReplacement(e.target.files?.[0] ?? null)} /></label>
+      <label className="block text-sm">Sostituisci file (facoltativo)<input className="mt-1 block w-full text-sm" type="file" disabled={locked} onChange={e => setReplacement(e.target.files?.[0] ?? null)} /></label>
       <div className="flex gap-2"><button type="button" className="button-primary" disabled={locked || !editing.display_name.trim()} onClick={saveEdit}>Salva documento</button><button type="button" className="button-secondary" disabled={locked} onClick={() => setEditing(null)}>Annulla</button></div>
     </div>}
     <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Aggiungi documenti</summary>
       <fieldset className="mt-3 space-y-3" disabled={locked}>
-        <label className="block text-sm">File PDF, JPG o PNG · massimo 10 MB ciascuno<input ref={fileInput} className="mt-2 block w-full text-sm" type="file" multiple accept={ACCEPT_DOCUMENTS} onChange={e => setFiles(Array.from(e.target.files ?? []))} /></label>
+        <label className="block text-sm">File PDF, JPG o PNG · massimo 10 MB ciascuno<input ref={fileInput} className="mt-2 block w-full text-sm" type="file" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} /></label>
         {files.length > 0 && <p className="break-words text-xs text-slate-500">{files.map(f => f.name).join(", ")}</p>}
         <label className="block text-sm">Tipo documento<select className="input mt-1" value={kind} onChange={e => setKind(e.target.value)}>{Object.entries(DOCUMENT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label className="block text-sm">Descrizione (facoltativa)<textarea className="input mt-1" maxLength={2000} value={description} onChange={e => setDescription(e.target.value)} /></label>
