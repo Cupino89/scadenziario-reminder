@@ -1,5 +1,6 @@
 "use client";
 
+import DocumentPicker from "@/components/DocumentPicker";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +10,6 @@ import {
   RotateCcw,
   Save,
   Trash2,
-  Upload,
   SkipForward,
   X,
   XCircle,
@@ -445,21 +445,7 @@ export default function DeadlineDetailPage() {
                       }
                     />
 
-                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm">
-                      <Upload size={18} />
-                      <span>
-                        {files.length ? `${files.length} file: ${files.map(f => f.name).join(", ")}` : "Carica ricevute PDF, JPG o PNG (max 10 MB ciascuna)"}
-                      </span>
-                      <input
-                        className="hidden"
-                        type="file"
-                        key={fileKey}
-                        multiple
-                        disabled={saving}
-
-                        onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                      />
-                    </label>
+                    <DocumentPicker key={fileKey} files={files} onChange={setFiles} multiple disabled={saving} />
 
                     <button className="button-primary w-full" disabled={saving}>
                       {saving ? "Salvataggio…" : "Registra pagamento"}

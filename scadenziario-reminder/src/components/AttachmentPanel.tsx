@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import DocumentPicker from "@/components/DocumentPicker";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Paperclip, Download, Eye, Pencil, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -21,7 +22,6 @@ export default function AttachmentPanel({ deadlineId, occurrenceId, paymentId = 
   const [replacement, setReplacement] = useState<File | null>(null);
   const [preview, setPreview] = useState<{ url: string; item: Attachment } | null>(null);
   const [openLink, setOpenLink] = useState<{ url: string; name: string; download: boolean } | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const locked = busy || disabled;
 
   async function load() {
@@ -56,7 +56,6 @@ export default function AttachmentPanel({ deadlineId, occurrenceId, paymentId = 
       setMessage(`${count ? `${count} documenti caricati. ` : ""}${documentError(error)} I file non salvati restano selezionati.`);
     } finally {
       setFiles(pending);
-      if (!pending.length && fileInput.current) fileInput.current.value = "";
       await load(); setBusy(false);
     }
   }
@@ -130,13 +129,13 @@ export default function AttachmentPanel({ deadlineId, occurrenceId, paymentId = 
       <label className="block text-sm">Nome documento<input className="input mt-1" maxLength={255} value={editing.display_name} onChange={e => setEditing({ ...editing, display_name: e.target.value })} disabled={locked} /></label>
       <label className="block text-sm">Tipo<select className="input mt-1" value={editing.document_type} onChange={e => setEditing({ ...editing, document_type: e.target.value })} disabled={locked}>{Object.entries(DOCUMENT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label className="block text-sm">Descrizione<textarea className="input mt-1" maxLength={2000} value={editing.description ?? ""} onChange={e => setEditing({ ...editing, description: e.target.value })} disabled={locked} /></label>
-      <label className="block text-sm">Sostituisci file (facoltativo)<input className="mt-1 block w-full text-sm" type="file" disabled={locked} onChange={e => setReplacement(e.target.files?.[0] ?? null)} /></label>
+      <p className="text-sm font-medium">Sostituisci file (facoltativo)</p>
+      <DocumentPicker files={replacement ? [replacement] : []} onChange={selected => setReplacement(selected[0] ?? null)} disabled={locked} />
       <div className="flex gap-2"><button type="button" className="button-primary" disabled={locked || !editing.display_name.trim()} onClick={saveEdit}>Salva documento</button><button type="button" className="button-secondary" disabled={locked} onClick={() => setEditing(null)}>Annulla</button></div>
     </div>}
     <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-blue-700">Aggiungi documenti</summary>
       <fieldset className="mt-3 space-y-3" disabled={locked}>
-        <label className="block text-sm">File PDF, JPG o PNG · massimo 10 MB ciascuno<input ref={fileInput} className="mt-2 block w-full text-sm" type="file" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} /></label>
-        {files.length > 0 && <p className="break-words text-xs text-slate-500">{files.map(f => f.name).join(", ")}</p>}
+        <DocumentPicker files={files} onChange={setFiles} multiple disabled={locked} />
         <label className="block text-sm">Tipo documento<select className="input mt-1" value={kind} onChange={e => setKind(e.target.value)}>{Object.entries(DOCUMENT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label className="block text-sm">Descrizione (facoltativa)<textarea className="input mt-1" maxLength={2000} value={description} onChange={e => setDescription(e.target.value)} /></label>
         <button type="button" className="button-primary" disabled={locked || !files.length} onClick={upload}>{busy ? "Operazione in corso…" : `Carica${files.length ? ` ${files.length} documenti` : " documenti"}`}</button>

@@ -5,8 +5,7 @@ export const DOCUMENT_TYPES = {
   receipt: "Ricevuta", invoice: "Fattura", f24: "F24", discharge: "Quietanza",
   notice: "Avviso di pagamento", certificate: "Attestazione", other: "Altro",
 } as const;
-// Keep file inputs unrestricted so mobile document providers remain available.
-// validateDocument enforces the supported formats before every upload.
+// validateDocument enforces supported formats before every upload, independently of picker hints.
 export const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 export function validateDocument(file: File) {
   if (!file.size || file.size > MAX_DOCUMENT_SIZE) throw new Error("Ogni file deve essere non vuoto e di massimo 10 MB.");
